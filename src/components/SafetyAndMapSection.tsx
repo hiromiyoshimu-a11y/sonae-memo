@@ -46,6 +46,20 @@ interface NominatimItem {
   display_name: string;
 }
 
+interface PhotonFeature {
+  geometry: { coordinates: [number, number] }; // [lng, lat]
+  properties: {
+    osm_id?: number;
+    name?: string;
+    state?: string;
+    city?: string;
+    district?: string;
+    locality?: string;
+    street?: string;
+    countrycode?: string;
+  };
+}
+
 const CARRIER_BOARDS = [
   {
     name: 'NTT 災害用伝言ダイヤル（171）',
@@ -129,6 +143,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
   const [mpAddress, setMpAddress] = useState('');
   const [mpLat, setMpLat] = useState<number>(35.681236); // 東京駅デフォルト
   const [mpLng, setMpLng] = useState<number>(139.767125);
+  const [coordsConfirmed, setCoordsConfirmed] = useState(false);
   const [mpRule, setMpRule] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
   const [searching, setSearching] = useState(false);
@@ -225,68 +240,109 @@ export const SafetyAndMapSection: React.FC<Props> = ({
     });
   }, [activeHazards]);
 
+  const searchPlaceCandidates = async (rawQuery: string): Promise<PlaceCandidate[]> => {
+    const q = rawQuery.trim();
+    if (!q) return [];
+
+    const [photonRes, nomRes, gsiRes] = await Promise.allSettled([
+      fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`),
+      fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&accept-language=ja&countrycodes=jp&limit=6&q=${encodeURIComponent(q)}`
+      ),
+      fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`),
+    ]);
+
+    const candidates: PlaceCandidate[] = [];
+    const seen = new Set<string>();
+
+    const pushUnique = (cand: PlaceCandidate) => {
+      const key = `${cand.lat.toFixed(4)},${cand.lng.toFixed(4)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push(cand);
+    };
+
+    if (photonRes.status === 'fulfilled' && photonRes.value.ok) {
+      const pData = (await photonRes.value.json()) as { features?: PhotonFeature[] };
+      for (const f of pData.features || []) {
+        if (f.properties.countrycode && f.properties.countrycode !== 'JP') continue;
+        const [lng, lat] = f.geometry.coordinates;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const p = f.properties;
+        const addrParts = [p.state, p.city, p.district, p.locality].filter(Boolean);
+        const label = p.name
+          ? addrParts.length > 0
+            ? `${p.name}（${addrParts.join('')}）`
+            : p.name
+          : addrParts.join('');
+        if (!label) continue;
+        pushUnique({
+          id: `pho-${p.osm_id || candidates.length}`,
+          label,
+          source: '施設・地名',
+          lat,
+          lng,
+        });
+      }
+    }
+
+    if (nomRes.status === 'fulfilled' && nomRes.value.ok) {
+      const nomData = (await nomRes.value.json()) as NominatimItem[];
+      for (const item of nomData) {
+        const lat = Number(item.lat);
+        const lng = Number(item.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const parts = item.display_name
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s && s !== '日本' && !/^\d{3}-\d{4}$/.test(s));
+        const shortLabel = parts.reverse().join(' ');
+        pushUnique({
+          id: `nom-${item.place_id}`,
+          label: shortLabel || item.display_name,
+          source: '施設・地名',
+          lat,
+          lng,
+        });
+      }
+    }
+
+    if (gsiRes.status === 'fulfilled' && gsiRes.value.ok) {
+      const gsiData = (await gsiRes.value.json()) as GsiSearchFeature[];
+      for (let i = 0; i < Math.min(gsiData.length, 5); i++) {
+        const feat = gsiData[i];
+        const [lng, lat] = feat.geometry.coordinates;
+        pushUnique({
+          id: `gsi-${i}-${feat.properties.title}`,
+          label: feat.properties.title,
+          source: '住所',
+          lat,
+          lng,
+        });
+      }
+    }
+
+    return candidates;
+  };
+
   const handleAddressSearch = async () => {
-    const q = mpAddress.trim();
-    if (!q) return;
+    const q = (mpAddress.trim() || mpName.trim());
+    if (!q) {
+      setSearchError('集合場所の名前または住所を入力してください。');
+      return;
+    }
     setSearching(true);
     setSearchError('');
     setSearchResults([]);
     try {
-      const [nomRes, gsiRes] = await Promise.allSettled([
-        fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&accept-language=ja&countrycodes=jp&limit=6&q=${encodeURIComponent(q)}`
-        ),
-        fetch(
-          `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`
-        ),
-      ]);
-
-      const candidates: PlaceCandidate[] = [];
-
-      if (nomRes.status === 'fulfilled' && nomRes.value.ok) {
-        const nomData = (await nomRes.value.json()) as NominatimItem[];
-        for (const item of nomData) {
-          const lat = Number(item.lat);
-          const lng = Number(item.lon);
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-          // display_name を読みやすく整形（日本、郵便番号などを後ろから整理）
-          const parts = item.display_name
-            .split(',')
-            .map((s) => s.trim())
-            .filter((s) => s && s !== '日本' && !/^\d{3}-\d{4}$/.test(s));
-          const shortLabel = parts.reverse().join(' ');
-          candidates.push({
-            id: `nom-${item.place_id}`,
-            label: shortLabel || item.display_name,
-            source: '施設・地名',
-            lat,
-            lng,
-          });
-        }
-      }
-
-      if (gsiRes.status === 'fulfilled' && gsiRes.value.ok) {
-        const gsiData = (await gsiRes.value.json()) as GsiSearchFeature[];
-        for (let i = 0; i < Math.min(gsiData.length, 5); i++) {
-          const feat = gsiData[i];
-          const [lng, lat] = feat.geometry.coordinates;
-          // 検索語と全く関係ない北海道の地名などが先頭に出るケースを避け、住所として追加
-          candidates.push({
-            id: `gsi-${i}-${feat.properties.title}`,
-            label: feat.properties.title,
-            source: '住所',
-            lat,
-            lng,
-          });
-        }
-      }
-
+      const candidates = await searchPlaceCandidates(q);
       if (candidates.length === 0) {
         setSearchError('候補が見つかりませんでした。市区町村名や駅名・学校名などを入れてみてください。');
       } else {
         setSearchResults(candidates);
         setMpLat(candidates[0].lat);
         setMpLng(candidates[0].lng);
+        setCoordsConfirmed(true);
       }
     } catch {
       setSearchError('場所の検索に接続できませんでした（オフラインの可能性があります）。');
@@ -305,6 +361,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
       (pos) => {
         setMpLat(Number(pos.coords.latitude.toFixed(6)));
         setMpLng(Number(pos.coords.longitude.toFixed(6)));
+        setCoordsConfirmed(true);
         if (!mpAddress.trim()) {
           setMpAddress('現在地周辺');
         }
@@ -324,6 +381,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
     setMpAddress('');
     setMpLat(35.681236);
     setMpLng(139.767125);
+    setCoordsConfirmed(false);
     setMpRule('');
     setSearchResults([]);
     setSearchError('');
@@ -336,6 +394,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
     setMpAddress(mp.address);
     setMpLat(mp.lat);
     setMpLng(mp.lng);
+    setCoordsConfirmed(true);
     setMpRule(mp.ruleMemo || '');
     setSearchResults([]);
     setSearchError('');
@@ -345,15 +404,38 @@ export const SafetyAndMapSection: React.FC<Props> = ({
   const handleSavePoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mpName.trim()) return;
+
+    let finalLat = mpLat;
+    let finalLng = mpLng;
+    let finalAddr = mpAddress.trim();
+
+    // 検索ボタンを押さずに保存された場合、自動で場所を検索して座標を取得する
+    if (!coordsConfirmed) {
+      const q = finalAddr || mpName.trim();
+      setSearching(true);
+      try {
+        const candidates = await searchPlaceCandidates(q);
+        if (candidates.length > 0) {
+          finalLat = candidates[0].lat;
+          finalLng = candidates[0].lng;
+          if (!finalAddr) finalAddr = candidates[0].label;
+        }
+      } catch {
+        // オフライン等の場合はそのまま保存
+      } finally {
+        setSearching(false);
+      }
+    }
+
     const newId = editingPoint
       ? editingPoint.id
       : `mp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     await onSaveMeetingPoint({
       id: newId,
       name: mpName.trim(),
-      address: mpAddress.trim() || `${mpLat.toFixed(4)}, ${mpLng.toFixed(4)}`,
-      lat: mpLat,
-      lng: mpLng,
+      address: finalAddr || `${finalLat.toFixed(4)}, ${finalLng.toFixed(4)}`,
+      lat: finalLat,
+      lng: finalLng,
       ruleMemo: mpRule.trim() || undefined,
       createdAt: editingPoint ? editingPoint.createdAt : new Date().toISOString(),
     });
@@ -678,9 +760,12 @@ export const SafetyAndMapSection: React.FC<Props> = ({
                     type="text"
                     className="input"
                     style={{ flex: '1 1 200px' }}
-                    placeholder="例：渋谷区宇田川町、〇〇市〇〇小学校"
+                    placeholder="例：熊本市立健軍小学校、渋谷区宇田川町"
                     value={mpAddress}
-                    onChange={(e) => setMpAddress(e.target.value)}
+                    onChange={(e) => {
+                      setMpAddress(e.target.value);
+                      setCoordsConfirmed(false);
+                    }}
                   />
                   <button
                     type="button"
@@ -738,6 +823,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
                           setMpAddress(cand.label);
                           setMpLat(cand.lat);
                           setMpLng(cand.lng);
+                          setCoordsConfirmed(true);
                           setSearchResults([]);
                         }}
                         style={{
