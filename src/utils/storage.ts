@@ -1,18 +1,20 @@
-import { BagItem, ChecklistItem, EmergencyBag, FontSizeOption, StockItem } from '../types';
+import { BagItem, ChecklistItem, EmergencyBag, FontSizeOption, MeetingPoint, StockItem } from '../types';
 import { DEFAULT_CHECKLIST_ITEMS } from '../data/defaultChecklist';
 
 const DB_NAME = 'SonaeMemoDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   STOCKS: 'stocks',
   CHECKLIST: 'checklist',
   BAGS: 'bags',
   BAG_ITEMS: 'bagItems',
+  MEETING_POINTS: 'meetingPoints',
 } as const;
 
 const FONT_SIZE_KEY = 'sonae_memo_font_size';
 const INITIALIZED_KEY = 'sonae_memo_initialized_v1';
+const SAFETY_NOTE_KEY = 'sonae_memo_safety_note';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -30,6 +32,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.BAG_ITEMS)) {
         db.createObjectStore(STORES.BAG_ITEMS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.MEETING_POINTS)) {
+        db.createObjectStore(STORES.MEETING_POINTS, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -120,6 +125,20 @@ export const removeBag = (id: string) => deleteFromStore(STORES.BAGS, id);
 export const loadBagItems = () => getAllFromStore<BagItem>(STORES.BAG_ITEMS);
 export const saveBagItem = (item: BagItem) => putToStore(STORES.BAG_ITEMS, item);
 export const removeBagItem = (id: string) => deleteFromStore(STORES.BAG_ITEMS, id);
+
+// Meeting Points
+export const loadMeetingPoints = () => getAllFromStore<MeetingPoint>(STORES.MEETING_POINTS);
+export const saveMeetingPoint = (mp: MeetingPoint) => putToStore(STORES.MEETING_POINTS, mp);
+export const removeMeetingPoint = (id: string) => deleteFromStore(STORES.MEETING_POINTS, id);
+
+// Safety Note
+export function loadSafetyNote(): string {
+  return localStorage.getItem(SAFETY_NOTE_KEY) || '';
+}
+
+export function saveSafetyNote(note: string): void {
+  localStorage.setItem(SAFETY_NOTE_KEY, note);
+}
 
 // Font Size
 export function loadFontSize(): FontSizeOption {

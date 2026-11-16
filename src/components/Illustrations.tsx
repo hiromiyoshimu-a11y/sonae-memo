@@ -84,6 +84,29 @@ export const ChecklistHeroIllustration: React.FC<{ size?: number }> = ({ size = 
   </svg>
 );
 
+/** 安否・避難タブ用：地図とピン・メガホンのイラスト */
+export const SafetyHeroIllustration: React.FC<{ size?: number }> = ({ size = 84 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-hidden="true">
+    <circle cx="50" cy="50" r="46" fill="#EDF4F8" />
+    <path
+      d="M20 34L38 26L62 34L80 26V68L62 76L38 68L20 76V34Z"
+      fill="#FFFFFF"
+      stroke="#4A8B7C"
+      strokeWidth="2.4"
+      strokeLinejoin="round"
+    />
+    <path d="M38 26V68" stroke="#CFE3DD" strokeWidth="2" />
+    <path d="M62 34V76" stroke="#CFE3DD" strokeWidth="2" />
+    <path
+      d="M50 23C43.4 23 38 28.4 38 35C38 44 50 56 50 56C50 56 62 44 62 35C62 28.4 56.6 23 50 23Z"
+      fill="#E07A5F"
+      stroke="#9E4731"
+      strokeWidth="2"
+    />
+    <circle cx="50" cy="35" r="4.5" fill="#FFFFFF" />
+  </svg>
+);
+
 /** 備蓄品ジャンルごとの可愛いプレースホルダーイラスト */
 export const GenreIllustration: React.FC<{ genre: StockGenre; size?: number }> = ({
   genre,

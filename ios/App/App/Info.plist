@@ -70,5 +70,7 @@
 	<string>備蓄品の外観写真を撮影して登録するためにカメラを使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>備蓄品の外観写真をアルバムから選択して登録するために写真ライブラリを使用します。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>災害時の集合場所の周辺地図やハザードマップを表示するために現在地を使用します。</string>
 </dict>
 </plist>

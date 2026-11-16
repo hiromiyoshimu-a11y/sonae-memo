@@ -102,4 +102,14 @@ export const FONT_SIZE_LABELS: Record<FontSizeOption, { label: string; short: st
   xlarge: { label: '特大 (21px)', short: '特大', px: 21 },
 };
 
-export type TabKey = 'stock' | 'checklist' | 'bags';
+export type TabKey = 'stock' | 'checklist' | 'bags' | 'safety';
+
+export interface MeetingPoint {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  ruleMemo?: string;
+  createdAt: string;
+}

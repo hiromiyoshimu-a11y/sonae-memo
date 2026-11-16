@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Backpack, CheckSquare, Package, Type } from 'lucide-react';
+import { Backpack, CheckSquare, MapPin, Package, Type } from 'lucide-react';
 import { BrandHomeIllustration } from './components/Illustrations';
 import {
   BagItem,
@@ -7,6 +7,7 @@ import {
   EmergencyBag,
   FONT_SIZE_LABELS,
   FontSizeOption,
+  MeetingPoint,
   StockItem,
   TabKey,
 } from './types';
@@ -16,21 +17,27 @@ import {
   loadBags,
   loadChecklist,
   loadFontSize,
+  loadMeetingPoints,
+  loadSafetyNote,
   loadStocks,
   removeBag,
   removeBagItem,
   removeChecklistItem,
+  removeMeetingPoint,
   removeStock,
   saveBag,
   saveBagItem,
   saveChecklistItem,
   saveFontSize,
+  saveMeetingPoint,
+  saveSafetyNote,
   saveStock,
 } from './utils/storage';
 import { getStockStatus, getTodayStr } from './utils/dateAndReminder';
 import { StockSection } from './components/StockSection';
 import { ChecklistSection } from './components/ChecklistSection';
 import { BagsSection } from './components/BagsSection';
+import { SafetyAndMapSection } from './components/SafetyAndMapSection';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('stock');
@@ -41,6 +48,8 @@ export const App: React.FC = () => {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [bags, setBags] = useState<EmergencyBag[]>([]);
   const [bagItems, setBagItems] = useState<BagItem[]>([]);
+  const [meetingPoints, setMeetingPoints] = useState<MeetingPoint[]>([]);
+  const [safetyNote, setSafetyNote] = useState<string>(() => loadSafetyNote());
 
   useEffect(() => {
     const px = FONT_SIZE_LABELS[fontSize].px;
@@ -53,17 +62,20 @@ export const App: React.FC = () => {
     (async () => {
       try {
         await initializeIfNeeded();
-        const [loadedStocks, loadedChecklist, loadedBags, loadedBagItems] = await Promise.all([
-          loadStocks(),
-          loadChecklist(),
-          loadBags(),
-          loadBagItems(),
-        ]);
+        const [loadedStocks, loadedChecklist, loadedBags, loadedBagItems, loadedMeetingPoints] =
+          await Promise.all([
+            loadStocks(),
+            loadChecklist(),
+            loadBags(),
+            loadBagItems(),
+            loadMeetingPoints(),
+          ]);
         if (!active) return;
         setStocks(loadedStocks);
         setChecklist(loadedChecklist);
         setBags(loadedBags);
         setBagItems(loadedBagItems);
+        setMeetingPoints(loadedMeetingPoints);
       } finally {
         if (active) setLoading(false);
       }
@@ -141,6 +153,24 @@ export const App: React.FC = () => {
     setBagItems((prev) => prev.filter((i) => i.id !== itemId));
   };
 
+  const handleSaveMeetingPoint = async (mp: MeetingPoint) => {
+    await saveMeetingPoint(mp);
+    setMeetingPoints((prev) => {
+      const exists = prev.some((m) => m.id === mp.id);
+      return exists ? prev.map((m) => (m.id === mp.id ? mp : m)) : [...prev, mp];
+    });
+  };
+
+  const handleDeleteMeetingPoint = async (id: string) => {
+    await removeMeetingPoint(id);
+    setMeetingPoints((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  const handleChangeSafetyNote = (note: string) => {
+    setSafetyNote(note);
+    saveSafetyNote(note);
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -202,6 +232,15 @@ export const App: React.FC = () => {
             <Backpack size={19} />
             <span>持ち出し袋 ({bags.length})</span>
           </button>
+
+          <button
+            type="button"
+            className={`nav-tab ${activeTab === 'safety' ? 'active' : ''}`}
+            onClick={() => setActiveTab('safety')}
+          >
+            <MapPin size={19} />
+            <span>安否・避難</span>
+          </button>
         </div>
       </nav>
 
@@ -234,6 +273,15 @@ export const App: React.FC = () => {
                 onDeleteBag={handleDeleteBag}
                 onSaveBagItem={handleSaveBagItem}
                 onDeleteBagItem={handleDeleteBagItem}
+              />
+            )}
+            {activeTab === 'safety' && (
+              <SafetyAndMapSection
+                meetingPoints={meetingPoints}
+                safetyNote={safetyNote}
+                onSaveMeetingPoint={handleSaveMeetingPoint}
+                onDeleteMeetingPoint={handleDeleteMeetingPoint}
+                onChangeSafetyNote={handleChangeSafetyNote}
               />
             )}
           </>
