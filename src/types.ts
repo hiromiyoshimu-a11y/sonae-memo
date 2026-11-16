@@ -19,6 +19,17 @@ export const STOCK_GENRES: StockGenre[] = [
   'その他',
 ];
 
+export const STORAGE_LOCATIONS: string[] = [
+  'キッチン・パントリー',
+  '床下収納',
+  '玄関・シューズボックス',
+  'リビング',
+  '寝室・クローゼット',
+  '洗面所・トイレ',
+  '車内・トランク',
+  '物置・倉庫',
+];
+
 export interface StockItem {
   id: string;
   name: string;
@@ -27,6 +38,7 @@ export interface StockItem {
   expiryDate: string; // YYYY-MM-DD
   quantity: number;
   unit: string;
+  location?: string;
   memo?: string;
   createdAt: string;
   updatedAt: string;

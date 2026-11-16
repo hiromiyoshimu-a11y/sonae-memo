@@ -1,18 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {
-  Bell,
-  CalendarPlus,
-  Camera,
-  Edit3,
-  Image as ImageIcon,
-  Plus,
-  RefreshCw,
-  Search,
-  Sparkles,
-  Trash2,
-  X,
-} from 'lucide-react';
-import { STOCK_GENRES, StockGenre, StockItem } from '../types';
+import { MapPin, Bell, CalendarPlus, Camera, Edit3, Image as ImageIcon, Plus, RefreshCw, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { STOCK_GENRES, STORAGE_LOCATIONS, StockGenre, StockItem } from '../types';
 import {
   downloadReminderIcs,
   formatJapaneseDate,
@@ -48,6 +36,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
   const [expiryDate, setExpiryDate] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState('個');
+  const [location, setLocation] = useState('');
   const [memo, setMemo] = useState('');
   const [photoDataUrl, setPhotoDataUrl] = useState<string | undefined>(undefined);
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -87,8 +76,9 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
       if (searchText.trim()) {
         const q = searchText.trim().toLowerCase();
         const matchName = item.name.toLowerCase().includes(q);
+        const matchLoc = (item.location || '').toLowerCase().includes(q);
         const matchMemo = (item.memo || '').toLowerCase().includes(q);
-        if (!matchName && !matchMemo) return false;
+        if (!matchName && !matchLoc && !matchMemo) return false;
       }
       return true;
     });
@@ -103,6 +93,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
     setExpiryDate(nextYear.toISOString().split('T')[0]);
     setQuantity(1);
     setUnit('本');
+    setLocation('');
     setMemo('');
     setPhotoDataUrl(undefined);
     setIsModalOpen(true);
@@ -115,6 +106,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
     setExpiryDate(item.expiryDate);
     setQuantity(item.quantity);
     setUnit(item.unit);
+    setLocation(item.location || '');
     setMemo(item.memo || '');
     setPhotoDataUrl(item.photoDataUrl);
     setIsModalOpen(true);
@@ -147,6 +139,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
       expiryDate,
       quantity: Math.max(1, Number(quantity) || 1),
       unit: unit.trim() || '個',
+      location: location.trim() || undefined,
       memo: memo.trim() || undefined,
       createdAt: editingItem ? editingItem.createdAt : now,
       updatedAt: now,
@@ -333,7 +326,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
             type="text"
             className="input"
             style={{ paddingLeft: '2.35rem' }}
-            placeholder="名称やメモで検索..."
+            placeholder="名称・保管場所・メモで検索..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
@@ -419,6 +412,12 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
                   <div>
                     <strong>数量:</strong> {item.quantity} {item.unit}
                   </div>
+                  {item.location && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--primary)', fontWeight: 700 }}>
+                      <MapPin size={14} />
+                      <span>保管場所: {item.location}</span>
+                    </div>
+                  )}
                   {item.memo && (
                     <div style={{ color: 'var(--text-main)', marginTop: '0.2rem' }}>
                       📝 {item.memo}
@@ -631,14 +630,43 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
               </div>
 
               <div className="form-group">
+                <label className="form-label" htmlFor="stock-location">
+                  保管場所（候補から選択 または フリー入力）
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                  {STORAGE_LOCATIONS.map((loc) => {
+                    const isSelected = location === loc;
+                    return (
+                      <button
+                        key={loc}
+                        type="button"
+                        className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setLocation(loc)}
+                      >
+                        {loc}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  id="stock-location"
+                  type="text"
+                  className="input"
+                  placeholder="上のボタンから選ぶか、自由に入力（例：パントリー2段目）"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
                 <label className="form-label" htmlFor="stock-memo">
-                  保管場所・メモ
+                  メモ
                 </label>
                 <textarea
                   id="stock-memo"
                   rows={2}
                   className="textarea"
-                  placeholder="例：パントリー2段目、災害時はそのまま食べられる"
+                  placeholder="例：災害時はそのまま食べられる"
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
                 />
