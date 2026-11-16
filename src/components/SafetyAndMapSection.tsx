@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   Compass,
+  Edit3,
   ExternalLink,
   Layers,
   MapPin,
@@ -24,9 +25,25 @@ interface Props {
   onChangeSafetyNote: (note: string) => void;
 }
 
+interface PlaceCandidate {
+  id: string;
+  label: string;
+  source: '施設・地名' | '住所';
+  lat: number;
+  lng: number;
+}
+
 interface GsiSearchFeature {
   geometry: { coordinates: [number, number] }; // [lng, lat]
   properties: { title: string };
+}
+
+interface NominatimItem {
+  place_id: number;
+  lat: string;
+  lon: string;
+  name?: string;
+  display_name: string;
 }
 
 const CARRIER_BOARDS = [
@@ -107,12 +124,13 @@ export const SafetyAndMapSection: React.FC<Props> = ({
 
   // Add/Edit Modal
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingPoint, setEditingPoint] = useState<MeetingPoint | null>(null);
   const [mpName, setMpName] = useState('');
   const [mpAddress, setMpAddress] = useState('');
   const [mpLat, setMpLat] = useState<number>(35.681236); // 東京駅デフォルト
   const [mpLng, setMpLng] = useState<number>(139.767125);
   const [mpRule, setMpRule] = useState('');
-  const [searchResults, setSearchResults] = useState<GsiSearchFeature[]>([]);
+  const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
@@ -214,22 +232,64 @@ export const SafetyAndMapSection: React.FC<Props> = ({
     setSearchError('');
     setSearchResults([]);
     try {
-      const res = await fetch(
-        `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`
-      );
-      if (!res.ok) throw new Error('検索に失敗しました');
-      const data = (await res.json()) as GsiSearchFeature[];
-      if (data.length === 0) {
-        setSearchError('候補が見つかりませんでした。市区町村名から入力してみてください。');
+      const [nomRes, gsiRes] = await Promise.allSettled([
+        fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&accept-language=ja&countrycodes=jp&limit=6&q=${encodeURIComponent(q)}`
+        ),
+        fetch(
+          `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`
+        ),
+      ]);
+
+      const candidates: PlaceCandidate[] = [];
+
+      if (nomRes.status === 'fulfilled' && nomRes.value.ok) {
+        const nomData = (await nomRes.value.json()) as NominatimItem[];
+        for (const item of nomData) {
+          const lat = Number(item.lat);
+          const lng = Number(item.lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+          // display_name を読みやすく整形（日本、郵便番号などを後ろから整理）
+          const parts = item.display_name
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s && s !== '日本' && !/^\d{3}-\d{4}$/.test(s));
+          const shortLabel = parts.reverse().join(' ');
+          candidates.push({
+            id: `nom-${item.place_id}`,
+            label: shortLabel || item.display_name,
+            source: '施設・地名',
+            lat,
+            lng,
+          });
+        }
+      }
+
+      if (gsiRes.status === 'fulfilled' && gsiRes.value.ok) {
+        const gsiData = (await gsiRes.value.json()) as GsiSearchFeature[];
+        for (let i = 0; i < Math.min(gsiData.length, 5); i++) {
+          const feat = gsiData[i];
+          const [lng, lat] = feat.geometry.coordinates;
+          // 検索語と全く関係ない北海道の地名などが先頭に出るケースを避け、住所として追加
+          candidates.push({
+            id: `gsi-${i}-${feat.properties.title}`,
+            label: feat.properties.title,
+            source: '住所',
+            lat,
+            lng,
+          });
+        }
+      }
+
+      if (candidates.length === 0) {
+        setSearchError('候補が見つかりませんでした。市区町村名や駅名・学校名などを入れてみてください。');
       } else {
-        setSearchResults(data.slice(0, 8));
-        // 1件目の座標を自動プレビューセット
-        const [lng, lat] = data[0].geometry.coordinates;
-        setMpLat(lat);
-        setMpLng(lng);
+        setSearchResults(candidates);
+        setMpLat(candidates[0].lat);
+        setMpLng(candidates[0].lng);
       }
     } catch {
-      setSearchError('住所検索に接続できませんでした（オフラインの可能性があります）。');
+      setSearchError('場所の検索に接続できませんでした（オフラインの可能性があります）。');
     } finally {
       setSearching(false);
     }
@@ -259,6 +319,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
   };
 
   const openAddModal = () => {
+    setEditingPoint(null);
     setMpName('');
     setMpAddress('');
     setMpLat(35.681236);
@@ -269,10 +330,24 @@ export const SafetyAndMapSection: React.FC<Props> = ({
     setModalOpen(true);
   };
 
+  const openEditModal = (mp: MeetingPoint) => {
+    setEditingPoint(mp);
+    setMpName(mp.name);
+    setMpAddress(mp.address);
+    setMpLat(mp.lat);
+    setMpLng(mp.lng);
+    setMpRule(mp.ruleMemo || '');
+    setSearchResults([]);
+    setSearchError('');
+    setModalOpen(true);
+  };
+
   const handleSavePoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mpName.trim()) return;
-    const newId = `mp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newId = editingPoint
+      ? editingPoint.id
+      : `mp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     await onSaveMeetingPoint({
       id: newId,
       name: mpName.trim(),
@@ -280,7 +355,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
       lat: mpLat,
       lng: mpLng,
       ruleMemo: mpRule.trim() || undefined,
-      createdAt: new Date().toISOString(),
+      createdAt: editingPoint ? editingPoint.createdAt : new Date().toISOString(),
     });
     setSelectedPointId(newId);
     setModalOpen(false);
@@ -369,18 +444,29 @@ export const SafetyAndMapSection: React.FC<Props> = ({
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                className="btn btn-danger-ghost btn-sm"
-                onClick={() => {
-                  if (confirm(`集合場所「${activePoint.name}」を削除しますか？`)) {
-                    onDeleteMeetingPoint(activePoint.id);
-                  }
-                }}
-                aria-label="集合場所を削除"
-              >
-                <Trash2 size={16} />
-              </button>
+              <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => openEditModal(activePoint)}
+                  aria-label="集合場所を編集"
+                >
+                  <Edit3 size={15} />
+                  編集
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger-ghost btn-sm"
+                  onClick={() => {
+                    if (confirm(`集合場所「${activePoint.name}」を削除しますか？`)) {
+                      onDeleteMeetingPoint(activePoint.id);
+                    }
+                  }}
+                  aria-label="集合場所を削除"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
@@ -555,7 +641,7 @@ export const SafetyAndMapSection: React.FC<Props> = ({
             <div className="modal-header">
               <h3 className="modal-title">
                 <Compass size={20} style={{ verticalAlign: 'text-bottom', marginRight: '0.35rem' }} />
-                災害時の集合場所を登録
+                {editingPoint ? '集合場所を編集' : '災害時の集合場所を登録'}
               </h3>
               <button
                 type="button"
@@ -626,41 +712,64 @@ export const SafetyAndMapSection: React.FC<Props> = ({
                   <div
                     style={{
                       marginTop: '0.5rem',
-                      border: '1px solid var(--border)',
+                      border: '1.5px solid var(--primary)',
                       borderRadius: '12px',
-                      maxHeight: '150px',
+                      maxHeight: '190px',
                       overflowY: 'auto',
                       background: 'var(--bg-page)',
                     }}
                   >
-                    {searchResults.map((feat, idx) => {
-                      const [lng, lat] = feat.geometry.coordinates;
-                      return (
-                        <button
-                          key={`${feat.properties.title}-${idx}`}
-                          type="button"
-                          onClick={() => {
-                            setMpAddress(feat.properties.title);
-                            setMpLat(lat);
-                            setMpLng(lng);
-                            setSearchResults([]);
-                          }}
+                    <div
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        background: 'var(--primary-light)',
+                        color: 'var(--primary)',
+                      }}
+                    >
+                      候補をタップして場所を確定してください：
+                    </div>
+                    {searchResults.map((cand) => (
+                      <button
+                        key={cand.id}
+                        type="button"
+                        onClick={() => {
+                          setMpAddress(cand.label);
+                          setMpLat(cand.lat);
+                          setMpLng(cand.lng);
+                          setSearchResults([]);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '0.45rem',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '0.55rem 0.75rem',
+                          border: 'none',
+                          borderBottom: '1px solid var(--border)',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          fontSize: '0.88rem',
+                        }}
+                      >
+                        <span
                           style={{
-                            display: 'block',
-                            width: '100%',
-                            textAlign: 'left',
-                            padding: '0.5rem 0.75rem',
-                            border: 'none',
-                            borderBottom: '1px solid var(--border)',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                            fontSize: '0.9rem',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: '6px',
+                            background: cand.source === '施設・地名' ? 'var(--accent-light)' : 'var(--primary-light)',
+                            color: cand.source === '施設・地名' ? 'var(--accent)' : 'var(--primary)',
+                            flexShrink: 0,
                           }}
                         >
-                          📍 {feat.properties.title}
-                        </button>
-                      );
-                    })}
+                          {cand.source}
+                        </span>
+                        <span>{cand.label}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
 
