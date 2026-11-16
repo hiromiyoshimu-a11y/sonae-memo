@@ -109,8 +109,7 @@ export const ChecklistSection: React.FC<Props> = ({
       {/* 絞り込み */}
       <div className="filter-bar" style={{ alignItems: 'center' }}>
         <select
-          className="select"
-          style={{ flex: '1 1 220px', maxWidth: '320px' }}
+          className="select filter-select"
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
         >

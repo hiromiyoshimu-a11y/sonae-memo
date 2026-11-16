@@ -349,12 +349,18 @@ textarea {
 .select,
 .textarea {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.65rem 0.9rem;
   border: 1.5px solid var(--border);
   border-radius: 14px;
   background: #ffffff;
   color: var(--text-main);
   font-size: 1rem;
+}
+
+.filter-select {
+  flex: 1 1 12.5rem;
 }
 
 .input:focus,
@@ -627,7 +633,10 @@ textarea {
     flex-direction: column;
     gap: 0.2rem;
     padding: 0.6rem 0.25rem;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+  }
+  .filter-select {
+    flex: 1 1 100%;
   }
   .main-content {
     padding: 0.9rem 0.75rem 4rem;

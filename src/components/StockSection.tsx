@@ -332,8 +332,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
           />
         </div>
         <select
-          className="select"
-          style={{ flex: '0 1 180px' }}
+          className="select filter-select"
           value={genreFilter}
           onChange={(e) => setGenreFilter(e.target.value)}
         >
@@ -345,8 +344,7 @@ export const StockSection: React.FC<Props> = ({ stocks, onSaveStock, onDeleteSto
           ))}
         </select>
         <select
-          className="select"
-          style={{ flex: '0 1 200px' }}
+          className="select filter-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'remind_or_expired' | 'safe')}
         >
