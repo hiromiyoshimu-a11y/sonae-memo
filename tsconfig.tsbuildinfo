@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/bagssection.tsx","./src/components/checklistsection.tsx","./src/components/illustrations.tsx","./src/components/stocksection.tsx","./src/data/defaultchecklist.ts","./src/utils/dateandreminder.ts","./src/utils/imageutils.ts","./src/utils/storage.ts"],"version":"5.6.3"}

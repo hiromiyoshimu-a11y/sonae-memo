@@ -1,0 +1,18 @@
+{
+  "name": "そなえメモ | ローリングストック & 防災備蓄",
+  "short_name": "そなえメモ",
+  "description": "おうちの備蓄品の賞味期限・リマインド、防災チェックリスト、非常用持ち出し袋をやさしく管理できるWebアプリ",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fdfaf6",
+  "theme_color": "#4a8b7c",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
